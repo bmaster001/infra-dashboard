@@ -1,42 +1,49 @@
 # Infra Dashboard
 
-Minimale statuspagina voor thuisinfrastructuur. Haalt data op uit Healthchecks.io, Uptime Kuma, Zabbix en custom API's.
+Minimal status page for home infrastructure. Pulls data from Healthchecks.io, Uptime Kuma, Zabbix and custom APIs.
 
-## Installatie
+## Installation
 
 ```bash
-cp config.example.json config.json   # pas aan naar jouw setup
-cp .env.example .env                 # vul API keys in
+cp config.example.json config.json   # adjust to your setup
+cp .env.example .env                 # fill in API keys
 docker compose up -d --build
 ```
 
-Beschikbaar op poort 3000. Wijzigingen in `config.json` worden opgepikt zonder herstart.
+Available on port 3000. Changes to `config.json` are picked up without restart.
 
-## Omgevingsvariabelen
+For Traefik, copy the override example and adjust the domain:
 
-Maak een `.env` bestand aan (zie `.env.example`):
+```bash
+cp docker-compose.override.example.yml docker-compose.override.yml
+```
 
-| Variabele | Beschrijving |
-|-----------|-------------|
+## Environment variables
+
+Create a `.env` file (see `.env.example`):
+
+| Variable | Description |
+|----------|-------------|
 | `HC_API_KEY` | Healthchecks.io API key |
 | `ZABBIX_TOKEN` | Zabbix API token |
-| `PORT` | Luisterpoort (standaard: 3000) |
+| `PORT` | Listen port (default: 3000) |
 
 ---
 
 ## config.json
 
-### Globale Zabbix-configuratie
+### Global Zabbix configuration
 
 ```json
 {
   "zabbix": {
-    "apiUrl": "http://zabbix.example.com/zabbix/api_jsonrpc.php",
-    "token": "jouw-api-token"
+    "apiUrl": "http://zabbix.example.com/zabbix/api_jsonrpc.php"
   },
   "sections": [ ... ]
 }
 ```
+
+The Zabbix token is read from the `ZABBIX_TOKEN` environment variable.
 
 ### Item types
 
@@ -47,13 +54,13 @@ Maak een `.env` bestand aan (zie `.env.example`):
   "type": "healthchecks",
   "label": "Proxmox1",
   "uuid": "8e2f29ff-...",
-  "status_labels": { "up": "OK", "down": "Mislukt" }
+  "status_labels": { "up": "OK", "down": "Failed" }
 }
 ```
 
 #### `kuma`
 
-Haalt alle monitors op van een Uptime Kuma statuspage. Optioneel filter op één monitor via `monitor`.
+Fetches all monitors from an Uptime Kuma status page. Optionally filter to a single monitor via `monitor`.
 
 ```json
 { "type": "kuma", "url": "https://uptimekuma.example.com", "slug": "mailcow" }
@@ -61,31 +68,32 @@ Haalt alle monitors op van een Uptime Kuma statuspage. Optioneel filter op één
 
 #### `omada-version`
 
-Vergelijkt de draaiende Omada Controller versie met de Omada support-pagina.
+Compares the running Omada Controller version against the Omada support page.
 
 ```json
 {
   "type": "omada-version",
   "label": "Omada Controller",
   "apiUrl": "https://192.168.0.20:8043/api/info",
-  "status_labels": { "up": "Up-to-date", "grace": "Update beschikbaar" }
+  "status_labels": { "up": "Up-to-date", "grace": "Update available" }
 }
 ```
 
 #### `zabbix-alerts`
 
-Toont actieve Zabbix-problemen (severities Warning t/m Disaster). Eén item per sectie, geen extra velden nodig.
+Shows active Zabbix problems (severities Warning through Disaster). One item per section, no extra fields required.
 
 ```json
 { "type": "zabbix-alerts" }
 ```
 
-- Geen problemen → groene "Geen actieve problemen" balk
-- Problemen → tabel met severity badge (geel/oranje/rood/donkerrood), hostname, omschrijving, tijdstip
+- No problems → green "No active problems" bar
+- Problems → table with severity badge (yellow/orange/red/dark red), hostname, description, timestamp
+- Only shows problems from enabled triggers/items, unacknowledged and unsuppressed
 
 #### `zabbix-item`
 
-Toont de waarde van één Zabbix-item als statuskaart. Handig voor update-tracking per service.
+Displays the value of a single Zabbix item as a status card. Useful for tracking updates per service.
 
 ```json
 {
@@ -94,20 +102,45 @@ Toont de waarde van één Zabbix-item als statuskaart. Handig voor update-tracki
   "host": "proxmox1",
   "itemKey": "docker.update[immich]",
   "valueMap": { "0": "up", "1": "grace" },
-  "status_labels": { "up": "Up-to-date", "grace": "Update beschikbaar" }
+  "status_labels": { "up": "Up-to-date", "grace": "Update available" }
 }
 ```
 
-| Veld | Verplicht | Beschrijving |
-|------|-----------|-------------|
-| `host` | ja | Technische hostname zoals Zabbix die kent (Monitoring → Hosts → "Host" kolom) |
-| `itemKey` | ja | Exacte item key (Configuration → Hosts → Items → "Key" kolom) |
-| `valueMap` | nee | Vertaalt de item-waarde naar een dashboardstatus (`up`/`grace`/`down`/`error`) |
-| `showValue` | nee | `true` om de ruwe waarde als meta-tekst te tonen |
-| `status_labels` | nee | Eigen labels voor de statussen |
+Optionally show current and latest version (like the `omada-version` card):
 
-**Host en item key vinden:**
-1. Zabbix → Monitoring → Hosts → kopieer de waarde uit de **Host** kolom (niet Visible name)
-2. Klik op de host → Items → zoek het item → kopieer de **Key** kolom
+```json
+{
+  "type": "zabbix-item",
+  "label": "HASS Core",
+  "host": "Home Assistant",
+  "itemKey": "update.home.assistant.core.update",
+  "currentVersionKey": "version.home.assistant.core.installed",
+  "latestVersionKey": "version.home.assistant.core.latest",
+  "valueMap": { "0": "up", "1": "grace" },
+  "status_labels": { "up": "Up-to-date", "grace": "Update available" }
+}
+```
 
-**Vereisten aan het Zabbix-item:** het item moet een waarde teruggeven die je via `valueMap` op een status kunt mappen. Voor update-tracking: een trapper item of UserParameter dat `0` (up-to-date) of `1` (update beschikbaar) teruggeeft. [Diun](https://crazymax.dev/diun/) kan dit automatisch bijhouden en rechtstreeks naar Zabbix schrijven.
+| Field | Required | Description |
+|-------|----------|-------------|
+| `host` | yes | Technical hostname as known in Zabbix (Monitoring → Hosts → "Host" column) |
+| `itemKey` | yes | Exact item key (Configuration → Hosts → Items → "Key" column) |
+| `currentVersionKey` | no | Zabbix item key holding the installed version string |
+| `latestVersionKey` | no | Zabbix item key holding the latest available version string |
+| `valueMap` | no | Maps item value to a dashboard status (`up`/`grace`/`down`/`error`) |
+| `showValue` | no | `true` to show the raw value as meta text |
+| `status_labels` | no | Custom labels for statuses |
+
+**Finding host and item key:**
+1. Zabbix → Monitoring → Hosts → copy the value from the **Host** column (not Visible name)
+2. Click the host → Items → find the item → copy the **Key** column
+
+**Requirements for the Zabbix item:** the item must return a value that can be mapped to a status via `valueMap`. For update tracking: a trapper item or UserParameter returning `0` (up-to-date) or `1` (update available). [Diun](https://crazymax.dev/diun/) can track this automatically and write directly to Zabbix.
+
+#### `static`
+
+A fixed card with no external data — useful for to-do items or notes.
+
+```json
+{ "type": "static", "label": "Docker container updates" }
+```
