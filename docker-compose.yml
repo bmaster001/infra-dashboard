@@ -1,0 +1,13 @@
+services:
+  infra-dashboard:
+    build: .
+    container_name: infra-dashboard
+    restart: unless-stopped
+    environment:
+      - HC_API_KEY=${HC_API_KEY}
+      - ZABBIX_TOKEN=${ZABBIX_TOKEN}
+      - PORT=3000
+    volumes:
+      - ./config.json:/app/config.json:ro
+    ports:
+      - "3000:3000"

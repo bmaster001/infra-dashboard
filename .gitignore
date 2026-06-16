@@ -1,0 +1,6 @@
+.claude/
+node_modules/
+.env
+config.json
+docker-compose.override.yml
+CLAUDE.md

@@ -1,0 +1,59 @@
+{
+  "zabbix": {
+    "apiUrl": "http://zabbix.example.com/zabbix/api_jsonrpc.php"
+  },
+  "sections": [
+    {
+      "label": "To do",
+      "items": [
+        { "type": "static", "label": "Docker container updates" },
+        { "type": "static", "label": "Linux updates" }
+      ]
+    },
+    {
+      "label": "Zabbix Alerts",
+      "items": [
+        { "type": "zabbix-alerts" }
+      ]
+    },
+    {
+      "label": "Backups",
+      "items": [
+        { "type": "healthchecks", "uuid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "label": "Server 1", "status_labels": { "up": "OK", "down": "Mislukt" } }
+      ]
+    },
+    {
+      "label": "Maintenance",
+      "items": [
+        { "type": "healthchecks", "uuid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "label": "Server 1 - Maintenance", "status_labels": { "up": "Gedraaid", "down": "Mislukt" } }
+      ]
+    },
+    {
+      "label": "Mailcow",
+      "items": [
+        { "type": "kuma", "url": "https://uptimekuma.example.com", "slug": "mailcow" }
+      ]
+    },
+    {
+      "label": "Updates",
+      "items": [
+        {
+          "type": "omada-version",
+          "label": "Omada Controller",
+          "apiUrl": "https://192.168.0.1:8043/api/info",
+          "status_labels": { "up": "Up-to-date", "grace": "Update beschikbaar" }
+        },
+        {
+          "type": "zabbix-item",
+          "label": "HASS Core",
+          "host": "Home Assistant",
+          "itemKey": "update.home.assistant.core.update",
+          "currentVersionKey": "version.home.assistant.core.installed",
+          "latestVersionKey": "version.home.assistant.core.latest",
+          "valueMap": { "0": "up", "1": "grace" },
+          "status_labels": { "up": "Up-to-date", "grace": "Update beschikbaar" }
+        }
+      ]
+    }
+  ]
+}
