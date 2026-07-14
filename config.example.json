@@ -2,6 +2,34 @@
   "zabbix": {
     "apiUrl": "http://zabbix.example.com/zabbix/api_jsonrpc.php"
   },
+  "opnsense": {
+    "url": "https://192.168.0.1",
+    "keyEnv": "OPNSENSE_API_KEY",
+    "secretEnv": "OPNSENSE_API_SECRET"
+  },
+  "tree": {
+    "hosts": [
+      {
+        "id": "proxmox1", "name": "Proxmox 1", "ip": "192.168.0.3",
+        "proxmoxApi": { "url": "https://192.168.0.3:8006/api2/json", "tokenEnv": "PROXMOX1_TOKEN" },
+        "docker": { "socketPath": "/var/run/docker.sock" }
+      },
+      {
+        "id": "proxmox2", "name": "Proxmox 2", "ip": "192.168.0.100",
+        "proxmoxApi": { "url": "https://192.168.0.100:8006/api2/json", "tokenEnv": "PROXMOX2_TOKEN" },
+        "guestDocker": [
+          { "matchName": "frigate", "docker": { "host": "192.168.0.40", "port": 2375 } }
+        ]
+      },
+      { "id": "vps1", "name": "VPS 1", "ip": "100.123.240.92", "link": "https://vps1.example.com" },
+      {
+        "id": "vps2", "name": "VPS 2", "ip": "100.98.172.93",
+        "docker": { "host": "100.98.172.93", "port": 2375 }
+      },
+      { "id": "minipc", "name": "Mini PC", "ip": "100.106.131.124", "link": "https://hass.example.com" }
+    ]
+  },
+  "ipscan": { "subnet": "192.168.0.0/24", "jsonPath": "./data/ipscan.json" },
   "sections": [
     {
       "label": "To do",

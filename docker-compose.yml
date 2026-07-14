@@ -6,6 +6,10 @@ services:
     environment:
       - HC_API_KEY=${HC_API_KEY}
       - ZABBIX_TOKEN=${ZABBIX_TOKEN}
+      - PROXMOX1_TOKEN=${PROXMOX1_TOKEN}
+      - PROXMOX2_TOKEN=${PROXMOX2_TOKEN}
+      - OPNSENSE_API_KEY=${OPNSENSE_API_KEY}
+      - OPNSENSE_API_SECRET=${OPNSENSE_API_SECRET}
       - PORT=3000
     volumes:
       - ./config.json:/app/config.json:ro

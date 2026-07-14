@@ -3,6 +3,9 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { fetchJSON, fetchText } = require('./lib/http');
+const { buildTree } = require('./lib/tree');
+const { buildIpScan, setLabel } = require('./lib/ipscan');
 
 const PORT = process.env.PORT || 3000;
 const HC_API_KEY = process.env.HC_API_KEY || '';
@@ -21,35 +24,6 @@ function loadConfig() {
   } catch (err) {
     throw new Error(`config.json: ${err.message}`);
   }
-}
-
-function fetchJSON(targetUrl, headers = {}, reqOpts = {}) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(targetUrl);
-    const mod = u.protocol === 'https:' ? https : http;
-    const opts = {
-      hostname: u.hostname,
-      port: u.port ? Number(u.port) : undefined,
-      path: u.pathname + u.search,
-      method: 'GET',
-      headers: { 'User-Agent': 'infra-dashboard/1.0', ...headers },
-      ...reqOpts,
-    };
-    const req = mod.request(opts, (res) => {
-      let body = '';
-      res.on('data', (c) => (body += c));
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch {
-          reject(new Error(`HTTP ${res.statusCode} — geen JSON response`));
-        }
-      });
-    });
-    req.setTimeout(12000, () => req.destroy(new Error('Request timeout')));
-    req.on('error', reject);
-    req.end();
-  });
 }
 
 function fetchZabbixJSON(apiUrl, token, method, params) {
@@ -85,27 +59,6 @@ function fetchZabbixJSON(apiUrl, token, method, params) {
     req.setTimeout(12000, () => req.destroy(new Error('Zabbix timeout')));
     req.on('error', reject);
     req.write(body);
-    req.end();
-  });
-}
-
-function fetchText(targetUrl) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(targetUrl);
-    const opts = {
-      hostname: u.hostname,
-      port: u.port ? Number(u.port) : undefined,
-      path: u.pathname + u.search,
-      method: 'GET',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; infra-dashboard/1.0)' },
-    };
-    const req = https.request(opts, (res) => {
-      let body = '';
-      res.on('data', (c) => (body += c));
-      res.on('end', () => resolve(body));
-    });
-    req.setTimeout(15000, () => req.destroy(new Error('Request timeout')));
-    req.on('error', reject);
     req.end();
   });
 }
@@ -177,6 +130,18 @@ async function fetchOmadaVersionData(apiUrl) {
 function sendJSON(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk;
+      if (data.length > 10_000) { reject(new Error('Body te groot')); req.destroy(); }
+    });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
 }
 
 function serveFile(res, filePath) {
@@ -422,15 +387,33 @@ async function fetchAllData(cfg) {
 // ── HTTP server ────────────────────────────────────────────────
 
 http.createServer(async (req, res) => {
-  if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
-
   const pathname = new URL(req.url, 'http://localhost').pathname;
 
   try {
     const cfg = loadConfig();
 
+    if (req.method === 'POST' && pathname === '/api/ipscan/label') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.ip) return sendJSON(res, { error: 'ip vereist' }, 400);
+      setLabel(cfg.ipscan || {}, body.ip, (body.label || '').trim());
+      const data = await buildIpScan(cfg.tree || { hosts: [] }, cfg.ipscan || {}, cfg.opnsense || {});
+      return sendJSON(res, data);
+    }
+
+    if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+
     if (pathname === '/api/data') {
       const data = await fetchAllData(cfg);
+      return sendJSON(res, data);
+    }
+
+    if (pathname === '/api/tree') {
+      const data = await buildTree(cfg.tree || { hosts: [] });
+      return sendJSON(res, data);
+    }
+
+    if (pathname === '/api/ipscan') {
+      const data = await buildIpScan(cfg.tree || { hosts: [] }, cfg.ipscan || {}, cfg.opnsense || {});
       return sendJSON(res, data);
     }
 

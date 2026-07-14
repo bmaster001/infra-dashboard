@@ -18,10 +18,29 @@
     </div>
   </header>
 
-  <main id="main">
-    <!-- Sections are injected dynamically from config -->
-  </main>
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="infra">Infrastructuur</button>
+    <button class="tab-btn" data-tab="ipscan">IP-adressen</button>
+  </nav>
+
+  <section id="panel-dashboard" class="tab-panel active">
+    <main id="main">
+      <!-- Sections are injected dynamically from config -->
+    </main>
+  </section>
+
+  <section id="panel-infra" class="tab-panel" hidden>
+    <div id="tree-root" class="tree-root"></div>
+  </section>
+
+  <section id="panel-ipscan" class="tab-panel" hidden>
+    <div id="ipscan-root" class="ipscan-root"></div>
+  </section>
 
   <script src="app.js"></script>
+  <script src="tree.js"></script>
+  <script src="ipscan.js"></script>
+  <script src="nav.js"></script>
 </body>
 </html>

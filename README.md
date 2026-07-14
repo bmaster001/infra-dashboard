@@ -144,3 +144,88 @@ A fixed card with no external data — useful for to-do items or notes.
 ```json
 { "type": "static", "label": "Docker container updates" }
 ```
+
+---
+
+## Infrastructure treeview & IP scan
+
+Two extra tabs besides the Dashboard:
+
+- **Infrastructuur** (`/api/tree`) — Physical host → Proxmox VM/LXC → Docker container tree, live status.
+- **IP-adressen** (`/api/ipscan`) — Every address in the configured LAN subnet, classified as known+active, unknown+active, known+inactive, or free. If `opnsense` is configured, each address also shows hostname/MAC/vendor from the dnsmasq lease table, plus a `Fixed`/`DHCP` badge (`is_reserved` in OPNsense — i.e. whether the address has a static lease/reservation or is handed out dynamically).
+
+Both degrade gracefully: if a Proxmox API, Docker socket/endpoint, or the IP scan file is unreachable, that branch shows `unreachable`/`stale` instead of crashing the server.
+
+**Docker socket permissions:** the container runs as the non-root `node` user (uid/gid 1000), which is not in the host's `docker` group by default — mounting `/var/run/docker.sock` read-only is not enough on its own. `docker-compose.override.yml` adds `group_add` with the docker group's gid; run `getent group docker` on the host and make sure that gid matches (it's `998` on Proxmox 1 at the time of writing).
+
+### `config.json` — `tree` / `ipscan`
+
+```json
+"tree": {
+  "hosts": [
+    { "id": "proxmox1", "name": "Proxmox 1", "ip": "192.168.0.3",
+      "proxmoxApi": { "url": "https://192.168.0.3:8006/api2/json", "tokenEnv": "PROXMOX1_TOKEN" },
+      "docker": { "socketPath": "/var/run/docker.sock" } },
+    { "id": "proxmox2", "name": "Proxmox 2", "ip": "192.168.0.100",
+      "proxmoxApi": { "url": "https://192.168.0.100:8006/api2/json", "tokenEnv": "PROXMOX2_TOKEN" },
+      "guestDocker": [
+        { "matchName": "frigate", "docker": { "host": "192.168.0.40", "port": 2375 } }
+      ] },
+    { "id": "vps1", "name": "VPS 1", "ip": "100.123.240.92", "link": "https://vps1.example.com" }
+  ]
+},
+"ipscan": { "subnet": "192.168.0.0/24", "jsonPath": "./data/ipscan.json" }
+```
+
+| Field | Description |
+|-------|-------------|
+| `tree.hosts[].proxmoxApi` | Optional. Proxmox API base URL + `tokenEnv` (env var holding `user@realm!tokenid=uuid`) → fetches VM/LXC inventory for that host. |
+| `tree.hosts[].docker` | Optional. Either `{ "socketPath": "/var/run/docker.sock" }` (local, read-only mount) or `{ "host": "...", "port": 2375 }` (remote Docker API over TCP) → lists that host's own containers. |
+| `tree.hosts[].guestDocker` | Optional. Matches a Proxmox VM/LXC by (substring of) name and attaches its Docker containers. |
+| `tree.hosts[].checkPort` | Used only for hosts with neither `proxmoxApi` nor `docker` — plain TCP reachability check (default port 443). |
+| `ipscan.subnet` | CIDR range to enumerate (e.g. `192.168.0.0/24`). |
+| `ipscan.jsonPath` | Path (relative to the repo root) to the JSON file written by the nmap cron job. Missing/corrupt file → empty scan list, `stale: true`. |
+
+Add the matching tokens to `.env`:
+
+```
+PROXMOX1_TOKEN=homepage@pve!homepage=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+PROXMOX2_TOKEN=homepage@pve!homepage=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+### `config.json` — `opnsense` (optional)
+
+Enriches the IP scan with live dnsmasq lease data — hostname, MAC, vendor, and whether the lease is a static reservation (`Fixed`) or handed out dynamically (`DHCP`):
+
+```json
+"opnsense": {
+  "url": "https://192.168.0.1",
+  "keyEnv": "OPNSENSE_API_KEY",
+  "secretEnv": "OPNSENSE_API_SECRET"
+}
+```
+
+Create an API key/secret in OPNsense under System → Access → Users (or a dedicated read-only API user), and add them to `.env`:
+
+```
+OPNSENSE_API_KEY=
+OPNSENSE_API_SECRET=
+```
+
+Missing/unreachable OPNsense → the ipscan table just falls back to hostname/MAC from the nmap scan file, no `Fixed`/`DHCP` badge.
+
+### IP scan cron job (on the Proxmox 1 host, not in the container)
+
+The container has no LAN access (it only sits on the `t2_proxy` Docker network), so the nmap scan runs on the Proxmox 1 host itself via cron and writes a JSON file that's mounted read-only into the container.
+
+```bash
+apt install -y jq   # nmap is normally already present
+mkdir -p /opt/infra-dashboard/scripts
+cp scripts/ipscan-cron.sh /opt/infra-dashboard/scripts/
+chmod +x /opt/infra-dashboard/scripts/ipscan-cron.sh
+crontab -e
+# add:
+0 * * * * /opt/infra-dashboard/scripts/ipscan-cron.sh >> /var/log/ipscan-cron.log 2>&1
+```
+
+The script writes to `<repo>/data/ipscan.json` by default (override with `IPSCAN_OUT_DIR`/`IPSCAN_SUBNET` env vars). Mount that `data/` directory read-only into the container — see `docker-compose.override.yml`.
